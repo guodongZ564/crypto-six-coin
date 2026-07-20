@@ -4,6 +4,9 @@ data:
   parquet_path: data/factor_timeseries.parquet
   # ccxt/Binance 现货 K 线的可回填起点，具体币种若上市更晚，collector 会自动从其实际上市日开始
   backfill_start_date: "2017-08-17"
+  # FRED 宏观序列的回填起点：早于所有序列实际起始日即可，collector 内部按各序列
+  # 自己的历史起点前向填充，这个日期只用来限定切片的左边界
+  macro_backfill_start_date: "1955-01-01"
 
 assets:
   - BTC
@@ -36,6 +39,70 @@ exchange:
     UNI: UNI/USDT:USDT
     LINK: LINK/USDT:USDT
     LTC: LTC/USDT:USDT
+  # OKX 公开统计接口用的原生代码，跟 ccxt 统一符号不是一回事，单独配一份
+  oi_ccy:
+    BTC: BTC
+    ETH: ETH
+    SOL: SOL
+    UNI: UNI
+    LINK: LINK
+    LTC: LTC
+  long_short_inst_id:
+    BTC: BTC-USDT-SWAP
+    ETH: ETH-USDT-SWAP
+    SOL: SOL-USDT-SWAP
+    UNI: UNI-USDT-SWAP
+    LINK: LINK-USDT-SWAP
+    LTC: LTC-USDT-SWAP
+
+coinbase_premium:
+  # 原规格是 vs Binance，Binance 对 GitHub Actions 有地域限制，改用 OKX 做参照价
+  BTC:
+    coinbase_product: BTC-USD
+    ref_symbol: BTC/USDT
+
+cryptoquant:
+  # CryptoQuant 完全不覆盖 SOL/UNI/LINK/LTC；当前套餐 API 历史深度约365天
+  netflow_assets:
+    BTC: btc
+    ETH: eth
+  pnl_supply_assets:
+    BTC: btc
+
+defillama:
+  chain_tvl:
+    ETH: Ethereum
+    SOL: Solana
+  dex_protocols:
+    UNI: uniswap
+  fee_protocols:
+    UNI: uniswap
+
+deribit:
+  # DVOL 只有 BTC/ETH，2021-03 上线
+  currencies:
+    BTC: BTC
+    ETH: ETH
+
+fred:
+  # units: pc1=同比%变化（CPI/PCE/M2 这类会一直趋势上升的指数用同比，
+  # 否则 z-score 会被长期趋势带偏）；lin=原始值（利率类本身已经是比率，直接用）
+  series:
+    core_cpi:
+      id: CPILFESL
+      units: pc1
+    core_pce:
+      id: PCEPILFE
+      units: pc1
+    m2:
+      id: M2SL
+      units: pc1
+    fed_funds_rate:
+      id: FEDFUNDS
+      units: lin
+    treasury_10y:
+      id: DGS10
+      units: lin
 
 anomaly:
   window_days: 90
@@ -83,3 +150,51 @@ factor_meta:
     direction_text:
       high: "极度贪婪 → 谨慎追高"
       low: "极度恐慌 → 逆向偏多"
+  core_cpi:
+    label: "核心CPI同比"
+    direction_text: ""
+  core_pce:
+    label: "核心PCE同比"
+    direction_text: ""
+  m2:
+    label: "M2同比"
+    direction_text: ""
+  fed_funds_rate:
+    label: "联邦基金利率"
+    direction_text: ""
+  treasury_10y:
+    label: "10Y美债收益率"
+    direction_text: ""
+  dvol:
+    label: "DVOL波动率"
+    direction_text: ""
+  chain_tvl:
+    label: "链TVL"
+    direction_text: ""
+  stablecoin_mcap:
+    label: "稳定币总市值"
+    direction_text: ""
+  dex_volume:
+    label: "DEX交易量"
+    direction_text: ""
+  protocol_fees:
+    label: "协议费用"
+    direction_text: ""
+  exchange_netflow:
+    label: "交易所净流"
+    direction_text: ""
+  supply_profit_pct:
+    label: "利润供应%"
+    direction_text: ""
+  supply_pnl_ratio:
+    label: "盈亏供应比"
+    direction_text: ""
+  coinbase_premium:
+    label: "Coinbase溢价"
+    direction_text: ""
+  open_interest:
+    label: "未平仓OI"
+    direction_text: ""
+  long_short_ratio:
+    label: "大户多空比"
+    direction_text: ""

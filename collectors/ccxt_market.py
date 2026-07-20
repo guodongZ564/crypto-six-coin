@@ -10,12 +10,19 @@ backfill 和 daily 复用同一套函数：调用方只需传入想要落库的 
 
 本版技术因子先覆盖 MA50/MA200/RSI14/MACD/布林带/量比；200周线、月线 MACD、
 相对强度留到 collector 补全阶段一并加入。
+
+未平仓 OI、大户多空比走 OKX 公开统计接口（ccxt 没有统一封装这两个指标，直接
+调 REST）。这两个接口本身历史就浅（约100天），跟规格里"仅约30天历史薄，
+从现在起自记增量"的预期一致，不额外做分页拉取更早数据。
 """
 
 from datetime import datetime, timedelta, timezone
 
 import ccxt
 import pandas as pd
+import requests
+
+OKX_STATS_BASE = "https://www.okx.com/api/v5/rubik/stat/contracts"
 
 # 覆盖 MA200 等指标所需的最大回看窗口，多留一些余量
 LOOKBACK_BUFFER_DAYS = 260
@@ -134,3 +141,53 @@ def collect_funding_rate(asset: str, symbol: str, start_date: str, end_date: str
         "source": f"ccxt:{exchange.id}",
     })
     return out.reset_index(drop=True)
+
+
+def collect_open_interest(asset: str, ccy: str, start_date: str, end_date: str) -> pd.DataFrame:
+    resp = requests.get(f"{OKX_STATS_BASE}/open-interest-volume", params={"ccy": ccy, "period": "1D"}, timeout=30)
+    resp.raise_for_status()
+    data = resp.json().get("data", [])
+    if not data:
+        return pd.DataFrame(columns=["date", "asset", "factor", "value", "source"])
+
+    df = pd.DataFrame(data, columns=["ts", "oi_usd", "vol_usd"])
+    # OKX 这两个统计接口的日线按 UTC+8（其所在地时区）零点分桶，不是 UTC 零点，
+    # 直接按 UTC 取 .dt.date 会把每根 bar 错标成前一天，导致"今天"永远查不到数据
+    df["date"] = pd.to_datetime(df["ts"].astype("int64"), unit="ms", utc=True).dt.tz_convert("Asia/Shanghai").dt.date.astype(str)
+    df = df.drop_duplicates(subset="date", keep="last")
+    df = df[(df["date"] >= start_date) & (df["date"] <= end_date)]
+
+    out = pd.DataFrame({
+        "date": df["date"],
+        "asset": asset,
+        "factor": "open_interest",
+        "value": df["oi_usd"].astype(float),
+        "source": "okx_stats",
+    })
+    return out.sort_values("date").reset_index(drop=True)
+
+
+def collect_long_short_ratio(asset: str, inst_id: str, start_date: str, end_date: str) -> pd.DataFrame:
+    resp = requests.get(
+        f"{OKX_STATS_BASE}/long-short-account-ratio-contract", params={"instId": inst_id, "period": "1D"}, timeout=30
+    )
+    resp.raise_for_status()
+    data = resp.json().get("data", [])
+    if not data:
+        return pd.DataFrame(columns=["date", "asset", "factor", "value", "source"])
+
+    df = pd.DataFrame(data, columns=["ts", "ratio"])
+    # OKX 这两个统计接口的日线按 UTC+8（其所在地时区）零点分桶，不是 UTC 零点，
+    # 直接按 UTC 取 .dt.date 会把每根 bar 错标成前一天，导致"今天"永远查不到数据
+    df["date"] = pd.to_datetime(df["ts"].astype("int64"), unit="ms", utc=True).dt.tz_convert("Asia/Shanghai").dt.date.astype(str)
+    df = df.drop_duplicates(subset="date", keep="last")
+    df = df[(df["date"] >= start_date) & (df["date"] <= end_date)]
+
+    out = pd.DataFrame({
+        "date": df["date"],
+        "asset": asset,
+        "factor": "long_short_ratio",
+        "value": df["ratio"].astype(float),
+        "source": "okx_stats",
+    })
+    return out.sort_values("date").reset_index(drop=True)

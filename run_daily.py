@@ -10,7 +10,7 @@ from datetime import date
 import ccxt
 import yaml
 
-from collectors import ccxt_market, sentiment
+from collectors import ccxt_market, coinbase_premium, cryptoquant, defillama, deribit, fred, sentiment
 from core import alert, anomaly, store
 
 CONFIG_PATH = "config/factors.yaml"
@@ -53,6 +53,24 @@ def main():
             failed_sources.append(f"funding_rate:{asset}")
             print(f"[FAIL] funding_rate {asset}: {e}")
 
+    for asset, ccy in config["exchange"]["oi_ccy"].items():
+        try:
+            df = ccxt_market.collect_open_interest(asset, ccy, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"open_interest:{asset}")
+            print(f"[FAIL] open_interest {asset}: {e}")
+
+    for asset, inst_id in config["exchange"]["long_short_inst_id"].items():
+        try:
+            df = ccxt_market.collect_long_short_ratio(asset, inst_id, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"long_short_ratio:{asset}")
+            print(f"[FAIL] long_short_ratio {asset}: {e}")
+
     try:
         df = sentiment.collect_fear_greed(today, today)
         store.upsert(parquet_path, df)
@@ -60,6 +78,87 @@ def main():
     except Exception as e:
         failed_sources.append("fear_greed")
         print(f"[FAIL] fear_greed: {e}")
+
+    try:
+        df = fred.collect_macro_factors(today, today, config["fred"]["series"])
+        store.upsert(parquet_path, df)
+        collected_count += len(df)
+    except Exception as e:
+        failed_sources.append("fred_macro")
+        print(f"[FAIL] fred macro: {e}")
+
+    for asset, currency in config["deribit"]["currencies"].items():
+        try:
+            df = deribit.collect_dvol(asset, currency, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"dvol:{asset}")
+            print(f"[FAIL] dvol {asset}: {e}")
+
+    for asset, chain in config["defillama"]["chain_tvl"].items():
+        try:
+            df = defillama.collect_chain_tvl(asset, chain, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"chain_tvl:{asset}")
+            print(f"[FAIL] chain_tvl {asset}: {e}")
+
+    try:
+        df = defillama.collect_stablecoin_mcap(today, today)
+        store.upsert(parquet_path, df)
+        collected_count += len(df)
+    except Exception as e:
+        failed_sources.append("stablecoin_mcap")
+        print(f"[FAIL] stablecoin_mcap: {e}")
+
+    for asset, protocol in config["defillama"]["dex_protocols"].items():
+        try:
+            df = defillama.collect_dex_volume(asset, protocol, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"dex_volume:{asset}")
+            print(f"[FAIL] dex_volume {asset}: {e}")
+
+    for asset, protocol in config["defillama"]["fee_protocols"].items():
+        try:
+            df = defillama.collect_protocol_fees(asset, protocol, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"protocol_fees:{asset}")
+            print(f"[FAIL] protocol_fees {asset}: {e}")
+
+    for asset, cq_asset in config["cryptoquant"]["netflow_assets"].items():
+        try:
+            df = cryptoquant.collect_exchange_netflow(asset, cq_asset, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"exchange_netflow:{asset}")
+            print(f"[FAIL] exchange_netflow {asset}: {e}")
+
+    for asset, cq_asset in config["cryptoquant"]["pnl_supply_assets"].items():
+        try:
+            df = cryptoquant.collect_supply_pnl(asset, cq_asset, today, today)
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"supply_pnl:{asset}")
+            print(f"[FAIL] supply_pnl {asset}: {e}")
+
+    for asset, spec in config["coinbase_premium"].items():
+        try:
+            df = coinbase_premium.collect_premium(
+                asset, spec["coinbase_product"], spec["ref_symbol"], today, today, ref_exchange=spot_exchange
+            )
+            store.upsert(parquet_path, df)
+            collected_count += len(df)
+        except Exception as e:
+            failed_sources.append(f"coinbase_premium:{asset}")
+            print(f"[FAIL] coinbase_premium {asset}: {e}")
 
     history = store.load(parquet_path)
     factor_meta = config.get("factor_meta", {})
