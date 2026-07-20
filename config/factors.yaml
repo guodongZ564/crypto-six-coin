@@ -16,7 +16,9 @@ assets:
   - MARKET
 
 exchange:
-  ccxt_id: binance
+  # Binance 对 GitHub Actions 默认 runner 的美国 IP 段有地域限制（451），
+  # 改用 OKX：现货 + 永续资金费率同一个交易所类即可，不受此限制
+  ccxt_id: okx
   # 现货 K 线来源，用于技术类因子（MA/RSI/MACD/布林带/量比）
   symbols:
     BTC: BTC/USDT
@@ -26,7 +28,7 @@ exchange:
     LINK: LINK/USDT
     LTC: LTC/USDT
   # 永续合约资金费率来源
-  funding_ccxt_id: binanceusdm
+  funding_ccxt_id: okx
   funding_symbols:
     BTC: BTC/USDT:USDT
     ETH: ETH/USDT:USDT

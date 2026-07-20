@@ -1,4 +1,8 @@
-"""ccxt/Binance 行情 collector：OHLCV 衍生技术因子 + 永续资金费率。
+"""ccxt 行情 collector：OHLCV 衍生技术因子 + 永续资金费率。
+
+交易所固定用 OKX（config.exchange.ccxt_id / funding_ccxt_id）：Binance 对
+GitHub Actions 默认 runner 所在的美国 IP 段有地域限制（451 Service
+unavailable from a restricted location），OKX 的公开行情接口不受此限制。
 
 backfill 和 daily 复用同一套函数：调用方只需传入想要落库的 [start_date, end_date]，
 函数内部按需要的 lookback 缓冲多拉一段历史用于指标计算，最终只返回落在
@@ -12,9 +16,6 @@ from datetime import datetime, timedelta, timezone
 
 import ccxt
 import pandas as pd
-
-OHLCV_SOURCE = "ccxt:binance"
-FUNDING_SOURCE = "ccxt:binanceusdm"
 
 # 覆盖 MA200 等指标所需的最大回看窗口，多留一些余量
 LOOKBACK_BUFFER_DAYS = 260
@@ -69,7 +70,7 @@ def _compute_technical_factors(ohlcv_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def collect_ohlcv_factors(asset: str, symbol: str, start_date: str, end_date: str, exchange=None) -> pd.DataFrame:
-    exchange = exchange or ccxt.binance({"enableRateLimit": True})
+    exchange = exchange or ccxt.okx({"enableRateLimit": True})
 
     fetch_start = datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=LOOKBACK_BUFFER_DAYS)
     since_ms = _date_to_ms(fetch_start.strftime("%Y-%m-%d"))
@@ -90,13 +91,13 @@ def collect_ohlcv_factors(asset: str, symbol: str, start_date: str, end_date: st
     long_rows = enriched.melt(id_vars=["date"], value_vars=factor_cols, var_name="factor", value_name="value")
     long_rows = long_rows.dropna(subset=["value"])
     long_rows["asset"] = asset
-    long_rows["source"] = OHLCV_SOURCE
+    long_rows["source"] = f"ccxt:{exchange.id}"
 
     return long_rows[["date", "asset", "factor", "value", "source"]].reset_index(drop=True)
 
 
 def collect_funding_rate(asset: str, symbol: str, start_date: str, end_date: str, exchange=None) -> pd.DataFrame:
-    exchange = exchange or ccxt.binanceusdm({"enableRateLimit": True})
+    exchange = exchange or ccxt.okx({"enableRateLimit": True})
 
     since_ms = _date_to_ms(start_date)
     until_ms = _date_to_ms(end_date) + 24 * 3600 * 1000 - 1
@@ -130,6 +131,6 @@ def collect_funding_rate(asset: str, symbol: str, start_date: str, end_date: str
         "asset": asset,
         "factor": "funding_rate",
         "value": df["fundingRate"].astype(float),
-        "source": FUNDING_SOURCE,
+        "source": f"ccxt:{exchange.id}",
     })
     return out.reset_index(drop=True)
