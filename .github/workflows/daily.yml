@@ -37,4 +37,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/factor_timeseries.parquet
           git diff --cached --quiet || git commit -m "data: daily factor update $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
           git push
