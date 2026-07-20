@@ -1,0 +1,83 @@
+# 因子监控配置。凭据全部走 GitHub Secrets，这里不出现任何真实密钥。
+
+data:
+  parquet_path: data/factor_timeseries.parquet
+  # ccxt/Binance 现货 K 线的可回填起点，具体币种若上市更晚，collector 会自动从其实际上市日开始
+  backfill_start_date: "2017-08-17"
+
+assets:
+  - BTC
+  - ETH
+  - SOL
+  - UNI
+  - LINK
+  - LTC
+  - MACRO
+  - MARKET
+
+exchange:
+  ccxt_id: binance
+  # 现货 K 线来源，用于技术类因子（MA/RSI/MACD/布林带/量比）
+  symbols:
+    BTC: BTC/USDT
+    ETH: ETH/USDT
+    SOL: SOL/USDT
+    UNI: UNI/USDT
+    LINK: LINK/USDT
+    LTC: LTC/USDT
+  # 永续合约资金费率来源
+  funding_ccxt_id: binanceusdm
+  funding_symbols:
+    BTC: BTC/USDT:USDT
+    ETH: ETH/USDT:USDT
+    SOL: SOL/USDT:USDT
+    UNI: UNI/USDT:USDT
+    LINK: LINK/USDT:USDT
+    LTC: LTC/USDT:USDT
+
+anomaly:
+  window_days: 90
+  min_window_days: 30
+  z_threshold: 2.0
+  # 硬阈值开关：即使 z 未超阈值，触碰这些边界也报警
+  hard_thresholds:
+    funding_rate:
+      high: 0.001   # 0.1%/8h
+      low: -0.001
+    fear_greed:
+      low: 20
+      high: 80
+
+# 因子展示名 + 多空含义文案占位符，规格2 用规则表补全 direction_text
+factor_meta:
+  ma50:
+    label: "MA50"
+    direction_text: ""
+  ma200:
+    label: "MA200"
+    direction_text: ""
+  rsi14:
+    label: "RSI(14)"
+    direction_text: ""
+  macd:
+    label: "MACD"
+    direction_text: ""
+  boll_upper:
+    label: "布林上轨"
+    direction_text: ""
+  boll_lower:
+    label: "布林下轨"
+    direction_text: ""
+  volume_ratio:
+    label: "量比"
+    direction_text: ""
+  funding_rate:
+    label: "资金费率"
+    direction_text:
+      high: "多头过热"
+      low: "空头过热"
+  fear_greed:
+    label: "恐慌贪婪"
+    direction_text:
+      high: "极度贪婪 → 谨慎追高"
+      low: "极度恐慌 → 逆向偏多"
