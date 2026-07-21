@@ -35,19 +35,27 @@ def _date_to_ms(date_str: str) -> int:
 
 def _fetch_ohlcv_all(exchange: ccxt.Exchange, symbol: str, since_ms: int, until_ms: int) -> list:
     all_candles = []
-    limit = 1000
-    while since_ms <= until_ms:
-        candles = exchange.fetch_ohlcv(symbol, timeframe="1d", since=since_ms, limit=limit)
+    limit = 300  # OKX 现货K线（Candles/HistoryCandles）单次请求上限都是300，传更大的值会被 ccxt 静默截断
+    empty_skip_ms = limit * 24 * 3600 * 1000  # 一个窗口的跨度
+
+    cursor = since_ms
+    while cursor <= until_ms:
+        candles = exchange.fetch_ohlcv(symbol, timeframe="1d", since=cursor, limit=limit)
         if not candles:
-            break
+            # 请求窗口早于交易所实际数据起点时 OKX 返回空页（不会截断到最早可用日期），
+            # 往后跳一个窗口重试，而不是直接放弃——否则回填从很早的起点开始时会拿到 0 行
+            cursor += empty_skip_ms
+            continue
+
         all_candles.extend(candles)
         last_ts = candles[-1][0]
-        if last_ts <= since_ms:
+        if last_ts <= cursor:
             break
-        since_ms = last_ts + 1
-        if len(candles) < limit:
-            break
-    return [c for c in all_candles if c[0] <= until_ms]
+        # 注意：OKX 一页返回的数量经常小于 limit，即使后面还有更多数据——不能拿
+        # "返回数 < limit" 当作"到头了"的信号，只能靠 cursor 追上 until_ms 来判断结束
+        cursor = last_ts + 1
+
+    return [c for c in all_candles if since_ms <= c[0] <= until_ms]
 
 
 def _compute_technical_factors(ohlcv_df: pd.DataFrame) -> pd.DataFrame:
@@ -110,7 +118,7 @@ def collect_funding_rate(asset: str, symbol: str, start_date: str, end_date: str
     until_ms = _date_to_ms(end_date) + 24 * 3600 * 1000 - 1
 
     all_rates = []
-    limit = 1000
+    limit = 100
     cursor = since_ms
     while cursor <= until_ms:
         batch = exchange.fetch_funding_rate_history(symbol, since=cursor, limit=limit)
@@ -121,8 +129,6 @@ def collect_funding_rate(asset: str, symbol: str, start_date: str, end_date: str
         if last_ts <= cursor:
             break
         cursor = last_ts + 1
-        if len(batch) < limit:
-            break
 
     if not all_rates:
         return pd.DataFrame(columns=["date", "asset", "factor", "value", "source"])
