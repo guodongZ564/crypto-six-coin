@@ -31,11 +31,17 @@ jobs:
           CRYPTOQUANT_API_KEY: ${{ secrets.CRYPTOQUANT_API_KEY }}
         run: python run_daily.py
 
+      - name: Run scoring
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run_scoring.py
+
       - name: Commit and push updated data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/factor_timeseries.parquet
-          git diff --cached --quiet || git commit -m "data: daily factor update $(date -u +%Y-%m-%d)"
+          git add data/factor_timeseries.parquet data/scores_timeseries.parquet
+          git diff --cached --quiet || git commit -m "data: daily factor + score update $(date -u +%Y-%m-%d)"
           git pull --rebase origin main
           git push
