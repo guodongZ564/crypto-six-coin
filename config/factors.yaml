@@ -119,6 +119,9 @@ anomaly:
 
 # 因子展示名 + 多空含义文案占位符，规格2 用规则表补全 direction_text
 factor_meta:
+  close_price:
+    label: "收盘价"
+    direction_text: ""
   ma50:
     label: "MA50"
     direction_text: ""

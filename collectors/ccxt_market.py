@@ -8,8 +8,10 @@ backfill 和 daily 复用同一套函数：调用方只需传入想要落库的 
 函数内部按需要的 lookback 缓冲多拉一段历史用于指标计算，最终只返回落在
 [start_date, end_date] 区间内的行。
 
-本版技术因子先覆盖 MA50/MA200/RSI14/MACD/布林带/量比；200周线、月线 MACD、
-相对强度留到 collector 补全阶段一并加入。
+本版技术因子覆盖收盘价(close_price)/MA50/MA200/RSI14/MACD/布林带/量比；
+close_price 是规格2打分层要用的（价格 vs MA/布林带都得拿它比较），派生指标
+本身不含原始价格。200周线、月线 MACD、相对强度留到 collector 补全阶段一并
+加入。
 
 未平仓 OI、大户多空比走 OKX 公开统计接口（ccxt 没有统一封装这两个指标，直接
 调 REST）。这两个接口本身历史就浅（约100天），跟规格里"仅约30天历史薄，
@@ -100,9 +102,10 @@ def collect_ohlcv_factors(asset: str, symbol: str, start_date: str, end_date: st
     raw = raw.drop_duplicates(subset="date", keep="last")
 
     enriched = _compute_technical_factors(raw)
+    enriched["close_price"] = enriched["close"]
     enriched = enriched[(enriched["date"] >= start_date) & (enriched["date"] <= end_date)]
 
-    factor_cols = ["ma50", "ma200", "rsi14", "macd", "boll_upper", "boll_lower", "volume_ratio"]
+    factor_cols = ["close_price", "ma50", "ma200", "rsi14", "macd", "boll_upper", "boll_lower", "volume_ratio"]
     long_rows = enriched.melt(id_vars=["date"], value_vars=factor_cols, var_name="factor", value_name="value")
     long_rows = long_rows.dropna(subset=["value"])
     long_rows["asset"] = asset
