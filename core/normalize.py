@@ -25,17 +25,45 @@ import pandas as pd
 DEGRADED_FACTORS = {"联邦基金利率/路径"}
 
 
+def build_factor_index(history: pd.DataFrame) -> dict:
+    """把长表按 (asset,factor) 分组、按 date 排好序，一次性建好查找表。
+
+    单个 NormalizeContext 实例内部的按需缓存只能省掉"同一个 ctx 被反复调用"
+    的重复筛选；回测一天要建 7 个 ctx（regime 1个 + 6币各1个），如果各建各的
+    缓存，同一个 (asset,factor) 组合还是会被从头筛好几遍。这个函数在
+    core/score.py 的 compute_all_scores 里只调一次，建好的 dict 被当天全部
+    7 个 ctx 共享，把"一天筛好几遍"降到"一天筛一遍"——这是让回测能在合理
+    时间内跑完全部历史的关键优化，不是可有可无的花活。
+    """
+    index = {}
+    for (asset, factor), group in history.groupby(["asset", "factor"], sort=False):
+        index[(asset, factor)] = group.sort_values("date").set_index("date")["value"]
+    return index
+
+
 @dataclass
 class NormalizeContext:
-    history: pd.DataFrame  # 长表，只含 date <= target_date 的行
+    """asset/target_date 之外，传 history（原始长表）或 index（预建好的查找表，
+    见 build_factor_index）二选一即可——两条路径最终都落到同一个 factor_series
+    接口，各因子函数不用关心调用方给的是哪一种。
+    """
+
     asset: str
     target_date: str
+    history: pd.DataFrame | None = None
+    index: dict | None = None
+
+    def __post_init__(self):
+        if self.index is None:
+            history = self.history if self.history is not None else pd.DataFrame(columns=["date", "asset", "factor", "value", "source"])
+            self.index = build_factor_index(history)
 
     def factor_series(self, factor: str, asset: str | None = None) -> pd.Series:
         asset = asset or self.asset
-        sub = self.history[(self.history["asset"] == asset) & (self.history["factor"] == factor)]
-        sub = sub.sort_values("date")
-        return sub.set_index("date")["value"]
+        # 缺省的空 Series 必须给 object(字符串) index，不能用默认的 int64
+        # RangeIndex——不然 history_before_today 里拿它跟 target_date(字符串)
+        # 比大小会直接 TypeError
+        return self.index.get((asset, factor), pd.Series(dtype=float, index=pd.Index([], dtype=object)))
 
     def today_value(self, factor: str, asset: str | None = None) -> float | None:
         s = self.factor_series(factor, asset)

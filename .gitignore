@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .env
 ~$*
+.pytest_cache/
+# 回测输出是跑 backtest/run_and_save.py 就能重新生成的产物，不进repo；
+# 报告本身发布成 Artifact 给用户看，不用靠git托管
+backtest/output/

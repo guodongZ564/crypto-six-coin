@@ -6,3 +6,5 @@ pyyaml
 pyarrow
 openpyxl
 pytest
+scipy
+matplotlib

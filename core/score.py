@@ -85,7 +85,7 @@ def regime_score_from_dimensions(macro_score: float | None, cycle_score: float |
     return (raw / eff_weight) / 2
 
 
-def _compute_dimension(ctx_factory, applicable_rules: list, dimension: str) -> DimensionResult:
+def _compute_dimension(ctx: normalize.NormalizeContext, applicable_rules: list, dimension: str) -> DimensionResult:
     total = len(applicable_rules)
     details = []
 
@@ -93,7 +93,7 @@ def _compute_dimension(ctx_factory, applicable_rules: list, dimension: str) -> D
         normalizer = normalize.NORMALIZERS.get(rule.name)
         if normalizer is None:
             continue
-        score = normalizer(ctx_factory())
+        score = normalizer(ctx)
         if score is None:
             continue
         details.append((rule.name, score, rule.weight, rule.name in normalize.DEGRADED_FACTORS))
@@ -129,15 +129,14 @@ def _action_band(score: float, action_bands: list) -> tuple:
     return last.action, last.meaning
 
 
-def compute_regime(history: pd.DataFrame, target_date: str, system_config, factor_rules: list) -> RegimeResult:
-    def ctx_factory():
-        return normalize.NormalizeContext(history=history, asset="MACRO", target_date=target_date)
+def compute_regime(history: pd.DataFrame, target_date: str, system_config, factor_rules: list, index: dict | None = None) -> RegimeResult:
+    ctx = normalize.NormalizeContext(history=history, index=index, asset="MACRO", target_date=target_date)
 
     macro_rules = [r for r in factor_rules if r.dimension == "宏观"]
     cycle_rules = [r for r in factor_rules if r.dimension == "行业周期" and "BTC" in r.applicable_assets]
 
-    macro_dim = _compute_dimension(ctx_factory, macro_rules, "宏观")
-    cycle_dim = _compute_dimension(ctx_factory, cycle_rules, "行业周期")
+    macro_dim = _compute_dimension(ctx, macro_rules, "宏观")
+    cycle_dim = _compute_dimension(ctx, cycle_rules, "行业周期")
 
     regime_score = regime_score_from_dimensions(macro_dim.score, cycle_dim.score, system_config.regime_dimension_weights)
     long_mult, short_mult, label = _regime_multiplier(regime_score, system_config.regime_bands)
@@ -159,15 +158,15 @@ def compute_coin_score(
     system_config,
     factor_rules: list,
     regime: RegimeResult,
+    index: dict | None = None,
 ) -> CoinScoreResult:
-    def ctx_factory():
-        return normalize.NormalizeContext(history=history, asset=asset, target_date=target_date)
+    ctx = normalize.NormalizeContext(history=history, index=index, asset=asset, target_date=target_date)
 
     dim_weights = system_config.coin_dimension_weights
     dimensions = {}
     for dim_name in rules.COIN_DIMENSIONS:
         applicable = [r for r in factor_rules if r.dimension == dim_name and asset in r.applicable_assets]
-        dimensions[dim_name] = _compute_dimension(ctx_factory, applicable, dim_name)
+        dimensions[dim_name] = _compute_dimension(ctx, applicable, dim_name)
 
     weighted_sum = 0.0
     eff_weight = 0.0
@@ -228,11 +227,18 @@ def compute_coin_score(
 
 
 def compute_all_scores(history: pd.DataFrame, target_date: str, system_config, factor_rules: list) -> tuple:
-    """返回 (RegimeResult, {asset: CoinScoreResult})。"""
+    """返回 (RegimeResult, {asset: CoinScoreResult})。
+
+    一天的评分要建 7 个 NormalizeContext（regime 1个 + 6币各1个），这里统一
+    建一次 index 给全部 7 个共享，避免同一个 (asset,factor) 被重复筛选 7 遍
+    ——回测要逐日重算全部历史，这个共享不是可选优化。
+    """
     hist_to_date = history[history["date"] <= target_date]
-    regime = compute_regime(hist_to_date, target_date, system_config, factor_rules)
+    index = normalize.build_factor_index(hist_to_date)
+
+    regime = compute_regime(hist_to_date, target_date, system_config, factor_rules, index=index)
     coin_results = {
-        asset: compute_coin_score(hist_to_date, target_date, asset, system_config, factor_rules, regime)
+        asset: compute_coin_score(hist_to_date, target_date, asset, system_config, factor_rules, regime, index=index)
         for asset in rules.ALL_ASSETS
     }
     return regime, coin_results
