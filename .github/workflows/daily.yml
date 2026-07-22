@@ -31,17 +31,21 @@ jobs:
           CRYPTOQUANT_API_KEY: ${{ secrets.CRYPTOQUANT_API_KEY }}
         run: python run_daily.py
 
-      - name: Run scoring
+      # 旧的六币固定分档播报(run_scoring.py)已下线：UNI/LINK/LTC 回测验证是
+      # 反向信号，固定 ±0.4/±1.0 分档也被动态分位取代，不能再每天推已知
+      # 有问题的判断。脚本本身留在仓库供手动调试，只是不再接入这个定时任务。
+      - name: Run narrated report (BTC/ETH/SOL)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python run_scoring.py
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m narrate.run_narrated_report
 
       - name: Commit and push updated data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/factor_timeseries.parquet data/scores_timeseries.parquet
+          git add data/factor_timeseries.parquet data/composite_score_history.parquet
           git diff --cached --quiet || git commit -m "data: daily factor + score update $(date -u +%Y-%m-%d)"
           git pull --rebase origin main
           git push

@@ -6,13 +6,28 @@ Claude 有机会把它省略掉——横幅和异动列表都是代码直接拼�
 import sys
 from datetime import date
 
-from core import alert
+from core import alert, store
 from narrate import narrator, prepare_report
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 WARNING_BANNER = "⚠️弱信号·辅助参考，不是自动下单信号"
+
+
+def _todays_data_present(target_date: str) -> bool:
+    """narration 依赖 run_daily.py 当天真的采集到了 BTC/ETH/SOL 的收盘价——
+    这是评分能不能算的最基本前提。检查这个而不是等评分算出一堆 None 才发现，
+    省一次没意义的 Claude API 调用，也避免推一条"看着像正常日报、其实全是
+    无法评分"的空报。"""
+    config = prepare_report.load_config()
+    factor_history = store.load(config["data"]["parquet_path"])
+    todays_close = factor_history[
+        (factor_history["date"] == target_date)
+        & (factor_history["factor"] == "close_price")
+        & (factor_history["asset"].isin(prepare_report.LIVE_ASSETS))
+    ]
+    return len(todays_close) >= len(prepare_report.LIVE_ASSETS)
 
 
 def _format_anomalies(anomalies: list) -> str:
@@ -42,8 +57,16 @@ def build_report(target_date: str) -> tuple:
 
 def main():
     target_date = date.today().isoformat()
+
+    if not _todays_data_present(target_date):
+        message = f"📊 三币策略日报 · {target_date}\n⚠️ 今日采集数据不完整（BTC/ETH/SOL 收盘价未齐），跳过评分，明天再看。"
+        print(message)
+        alert.send_telegram_message(message)
+        return
+
     report_text, payload = build_report(target_date)
     print(report_text)
+    alert.send_telegram_message(report_text)
     print()
     print("[run_narrated_report] payload 摘要：", {
         c["asset"]: {"score": c["composite_score"], "action": c["action"], "position": c["target_position_pct"]}
