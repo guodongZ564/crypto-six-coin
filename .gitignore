@@ -8,3 +8,8 @@ __pycache__/
 # 是校准对比时用的临时输出目录，一并忽略
 backtest/output/
 backtest/output_*/
+
+# 仪表盘 docs/index.html 每天全量重新生成、体积不小，不进 main 的历史——发布
+# 走独立的 gh-pages 孤儿分支(.github/workflows/daily.yml 里的部署步骤)，本地
+# 跑 dashboard/build_dashboard.py 还是会生成这个文件供本地预览，只是不提交
+docs/

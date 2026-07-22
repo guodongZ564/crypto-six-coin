@@ -1,24 +1,32 @@
-"""轻量级 SVG 折线图生成器：不用 matplotlib、不依赖任何外部 CDN，纯手拼 SVG。
+"""交互式 SVG 折线图：hover 时显示对应日期和数值的 tooltip。纯手写 SVG+原生
+JS，不接任何外部图表库/CDN——六币加起来上百个因子，接一个通用图表库反而
+增加不必要的体积和"库挂了页面就崩"的风险，原生实现更可控、离线也能跑。
 
-仪表盘要给六币每个因子都画一张历史曲线，少说上百张图——backtest/report.py
-那种 matplotlib PNG 一张就要几十KB，图一多页面直接膨胀到几MB不现实。SVG
-折线一张也就一两KB，够用。
+历史数据点太多(比如BTC收盘价有3000+天)时先降采样到 MAX_POINTS 个点再画，
+这么小的图本来也显示不出每天的细节，降采样不影响观感，还能把要塞进页面的
+JSON 体积压下来。hover 交互的 JS 逻辑统一写在 build_dashboard.py 里一次性
+注入页面（事件委托到所有图表上），不是每张图重复一份脚本。
 """
 
-import html as html_escape
+import json
+
+MAX_POINTS = 200
 
 
-def _format_num(v: float) -> str:
-    if abs(v) >= 1000:
-        return f"{v:,.0f}"
-    if abs(v) >= 1:
-        return f"{v:.3f}"
-    return f"{v:.5f}"
-
-
-def render_sparkline(dates: list, values: list, width: int = 320, height: int = 80, color: str = "var(--accent)") -> str:
-    """dates/values 按时间升序对齐；None 值会被跳过。少于2个有效点时返回"无数据"提示。"""
+def _downsample(dates: list, values: list, max_points: int = MAX_POINTS) -> list:
     pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
+    if len(pairs) <= max_points:
+        return pairs
+    step = (len(pairs) - 1) / (max_points - 1)
+    indices = sorted({round(i * step) for i in range(max_points)} | {0, len(pairs) - 1})
+    return [pairs[i] for i in indices]
+
+
+def render_interactive_chart(dates: list, values: list, chart_id: str, width: int = 220, height: int = 44, color: str = "var(--accent)") -> str:
+    """返回一段 <div class='chart-wrap'>...</div>，需要配合 build_dashboard.py
+    页面里统一注入的 hover 脚本（读取内嵌的 <script type="application/json"> 数据）。
+    """
+    pairs = _downsample(dates, values)
     if len(pairs) < 2:
         return "<div class='no-data'>历史数据不足</div>"
 
@@ -26,36 +34,26 @@ def render_sparkline(dates: list, values: list, width: int = 320, height: int = 
     vmin, vmax = min(vs), max(vs)
     vrange = (vmax - vmin) or (abs(vmax) or 1)
 
-    pad_x, pad_y = 3, 8
+    pad = 3
     n = len(pairs)
-    span_x = width - 2 * pad_x
-    span_y = height - 2 * pad_y
+    span_x = width - 2 * pad
+    span_y = height - 2 * pad
 
     def x_at(i):
-        return pad_x + span_x * i / (n - 1)
+        return pad + span_x * i / (n - 1)
 
     def y_at(v):
-        return height - pad_y - span_y * (v - vmin) / vrange
+        return height - pad - span_y * (v - vmin) / vrange
 
-    points = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}" for i, (_, v) in enumerate(pairs))
-    last_date, last_value = pairs[-1]
-    first_date = pairs[0][0]
+    points_str = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}" for i, (_, v) in enumerate(pairs))
+    data_json = json.dumps(pairs, ensure_ascii=False)
 
-    baseline_y = y_at(0) if vmin <= 0 <= vmax else None
-    baseline_svg = (
-        f'<line x1="{pad_x}" y1="{baseline_y:.1f}" x2="{width - pad_x}" y2="{baseline_y:.1f}" '
-        f'stroke="var(--border)" stroke-width="1" stroke-dasharray="2,2" />'
-        if baseline_y is not None else ""
-    )
-
-    return f"""<svg viewBox="0 0 {width} {height}" class="sparkline" preserveAspectRatio="none" role="img"
-     aria-label="{html_escape.escape(str(last_date))} 最新值 {html_escape.escape(_format_num(last_value))}">
-  {baseline_svg}
-  <polyline points="{points}" fill="none" stroke="{color}" stroke-width="1.6" stroke-linejoin="round" />
-  <circle cx="{x_at(n - 1):.1f}" cy="{y_at(last_value):.1f}" r="2.4" fill="{color}" />
-</svg>
-<div class="spark-meta">
-  <span>{html_escape.escape(str(first_date))}</span>
-  <span class="spark-latest">{_format_num(last_value)}</span>
-  <span>{html_escape.escape(str(last_date))}</span>
+    return f"""<div class="chart-wrap">
+  <svg viewBox="0 0 {width} {height}" class="chart-svg" preserveAspectRatio="none">
+    <polyline points="{points_str}" fill="none" stroke="{color}" stroke-width="1.5" stroke-linejoin="round" />
+    <line class="hover-line" x1="0" y1="0" x2="0" y2="{height}"></line>
+    <circle class="hover-dot" r="2.6"></circle>
+  </svg>
+  <div class="chart-tooltip"></div>
+  <script type="application/json" class="chart-data">{data_json}</script>
 </div>"""

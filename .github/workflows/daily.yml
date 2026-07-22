@@ -41,9 +41,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m narrate.run_narrated_report
 
-      # 只生成 docs/index.html，不接 GitHub Pages 部署——用户要先看过展示逻辑
-      # 和免责措辞再决定要不要公开。手动触发(workflow_dispatch)走的是同一个
-      # job、同一套 on: 触发器，会完整跑一遍采集→评分→生成，不是单独刷新页面。
+      # 手动触发(workflow_dispatch)走的是同一个 job、同一套 on: 触发器，会
+      # 完整跑一遍采集→评分→生成，不是单独刷新页面。
       - name: Build dashboard (docs/index.html)
         run: python -m dashboard.build_dashboard
 
@@ -51,7 +50,26 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/factor_timeseries.parquet data/composite_score_history.parquet docs/index.html
+          git add data/factor_timeseries.parquet data/composite_score_history.parquet
           git diff --cached --quiet || git commit -m "data: daily factor + score update $(date -u +%Y-%m-%d)"
           git pull --rebase origin main
           git push
+
+      # docs/index.html 每天全量重新生成、体积不小，不进 main 的提交历史——
+      # 单独发到一个孤儿分支 gh-pages，每次都是全新的单个commit、force push
+      # 覆盖，不在任何分支上累积历史。仓库 Settings → Pages → Source 需要手动
+      # 选一次 gh-pages 分支，这一步没法用 git 操作代劳。
+      - name: Deploy dashboard to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cp docs/index.html /tmp/dashboard.html
+          git checkout --orphan gh-pages-deploy
+          git rm -rf . > /dev/null 2>&1 || true
+          git clean -fdx -q
+          cp /tmp/dashboard.html ./index.html
+          git add index.html
+          git commit -m "dashboard: update $(date -u +%Y-%m-%d)"
+          git push origin gh-pages-deploy:gh-pages --force
+          git checkout main
+          git branch -D gh-pages-deploy
