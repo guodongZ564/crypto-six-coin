@@ -7,7 +7,7 @@ import requests
 TELEGRAM_API_BASE = "https://api.telegram.org"
 
 
-def _format_value(value: float) -> str:
+def format_value(value: float) -> str:
     if abs(value) >= 100:
         return f"{value:.1f}"
     if abs(value) >= 1:
@@ -22,12 +22,12 @@ def format_alert_message(date_str: str, anomalies: list[dict], summary: dict) ->
         arrow = "▲" if (z is not None and z > 0) else "▼"
         emoji = "🔴" if (z is None or z > 0) else "🟢"
         z_text = f"{z:+.1f}" if z is not None else "N/A"
-        mean_text = _format_value(a["mean"]) if a.get("mean") is not None else "N/A"
+        mean_text = format_value(a["mean"]) if a.get("mean") is not None else "N/A"
         direction_text = a.get("direction_text") or ""
         suffix = f" → {direction_text}" if direction_text else ""
         lines.append(
             f"{emoji} {a['asset']} {a['label']} {arrow} z={z_text}  "
-            f"当前{_format_value(a['value'])}（{a['asset']}近90日均{mean_text}）{suffix}"
+            f"当前{format_value(a['value'])}（{a['asset']}近90日均{mean_text}）{suffix}"
         )
     lines.append(f"—— 采集{summary['collected']}因子 异动{summary['anomaly_count']} 失败源{summary['failed_sources']}")
     return "\n".join(lines)
