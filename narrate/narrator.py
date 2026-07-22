@@ -54,8 +54,10 @@ def generate_narrative(payload: dict, api_key: str | None = None) -> str:
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model=MODEL,
-        max_tokens=1500,
+        max_tokens=3000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": _build_user_message(payload)}],
     )
+    if message.stop_reason == "max_tokens":
+        print("[narrator][WARN] 输出撞到 max_tokens 被截断了，考虑再调大或者精简 system prompt 的要求")
     return "".join(block.text for block in message.content if block.type == "text")
