@@ -281,6 +281,62 @@ def score_btc_loss_supply_ratio(ctx: NormalizeContext) -> float | None:
     return score_by_thresholds(loss_pct, [(10, -1.0), (30, 0.0), (50, 1.0), (None, 2.0)])
 
 
+def score_btc_200w_ma(ctx: NormalizeContext) -> float | None:
+    """200周MA/月线MACD 都是从已有的 close_price 日线序列现算，不用额外
+    collector。两个都只用"严格早于当天"的完整周/月K线构造指标本身（不把
+    还没走完的当前周/当前月的部分数据当成一整根K线用），跟其他趋势型因子
+    统一防未来函数的口径一致，也避免月初/周初用不完整数据算出来的指标
+    值不稳定。"""
+    price_series = ctx.factor_series("close_price", asset="BTC").sort_index()
+    if ctx.target_date not in price_series.index:
+        return None
+    today_price = price_series[ctx.target_date]
+
+    hist_series = price_series[price_series.index < ctx.target_date].copy()
+    if len(hist_series) < 200 * 7:
+        return None
+    hist_series.index = pd.to_datetime(hist_series.index)
+    weekly = hist_series.resample("W").last().dropna()
+    if len(weekly) < 200:
+        return None
+
+    ma_200w = weekly.tail(200).mean()
+    if ma_200w == 0 or pd.isna(ma_200w):
+        return None
+
+    diff_pct = (today_price - ma_200w) / ma_200w
+    if diff_pct > 0.05:
+        return 2.0
+    if diff_pct < -0.05:
+        return -2.0
+    return 0.0
+
+
+def score_btc_monthly_macd(ctx: NormalizeContext) -> float | None:
+    """跟 score_macd_daily 一样的近似（只有MACD线，没有信号线柱状图），
+    resample 到月线上算，只用完整月份。"""
+    price_series = ctx.factor_series("close_price", asset="BTC").sort_index()
+    hist_series = price_series[price_series.index < ctx.target_date].copy()
+    if len(hist_series) < 26 * 30:
+        return None
+    hist_series.index = pd.to_datetime(hist_series.index)
+    monthly = hist_series.resample("ME").last().dropna()
+    if len(monthly) < 27:
+        return None
+
+    ema12 = monthly.ewm(span=12, adjust=False).mean()
+    ema26 = monthly.ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+
+    latest = macd_line.iloc[-1]
+    prev = macd_line.iloc[-2]
+    if latest > 0 and latest >= prev:
+        return 1.5
+    if latest < 0 and latest <= prev:
+        return -1.5
+    return 0.0
+
+
 def score_btc_profit_supply_pct(ctx: NormalizeContext) -> float | None:
     value = ctx.today_value("supply_profit_pct", asset="BTC")
     if value is None:
@@ -430,6 +486,8 @@ NORMALIZERS = {
     "UNI 费用收入": score_uni_protocol_fees,
     "恐慌贪婪指数": score_fear_greed,
     "稳定币总量": score_stablecoin_supply,
+    "BTC 价格 vs 200周MA": score_btc_200w_ma,
+    "BTC 月线MACD": score_btc_monthly_macd,
     "BTC 亏损供应比": score_btc_loss_supply_ratio,
     "BTC 利润供应%": score_btc_profit_supply_pct,
     "资金费率": score_funding_rate,

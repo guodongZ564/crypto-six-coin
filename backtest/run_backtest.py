@@ -13,7 +13,7 @@ import sys
 
 import pandas as pd
 
-from backtest import metrics, point_in_time, strategy
+from backtest import dynamic_bands, metrics, point_in_time, strategy
 from core import rules, score, store
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -25,15 +25,18 @@ DEFAULT_FEE_RATE = 0.0005  # 单边 0.05%
 BURN_IN_DAYS = 90  # 让趋势/分位类归一化有基线可用
 
 
-def _daily_score_series(full_history: pd.DataFrame, vintage_cache: pd.DataFrame, system_config, factor_rules, dates: list) -> dict:
-    """逐日跑 compute_all_scores，返回 {asset: DataFrame(date, composite_score, action, raw_score, valid, total)}。"""
-    per_asset_rows = {asset: [] for asset in rules.ALL_ASSETS}
+def _daily_score_series(full_history: pd.DataFrame, vintage_cache: pd.DataFrame, system_config, factor_rules, dates: list, target_assets: list) -> dict:
+    """逐日跑 compute_all_scores，返回 {asset: DataFrame(date, composite_score, action, raw_score, valid, total)}。
+    compute_all_scores 内部一次算全部6币（regime和factor index是共享的，
+    单独挑几个币算不了多少），这里只是挑 target_assets 记下来，不改内部计算量。
+    """
+    per_asset_rows = {asset: [] for asset in target_assets}
 
     for i, d in enumerate(dates):
         pit_history = point_in_time.build_point_in_time_history(full_history, vintage_cache, d)
         regime, coin_results = score.compute_all_scores(pit_history, d, system_config, factor_rules)
 
-        for asset in rules.ALL_ASSETS:
+        for asset in target_assets:
             r = coin_results[asset]
             per_asset_rows[asset].append({
                 "date": d,
@@ -57,22 +60,35 @@ def _close_price_series(full_history: pd.DataFrame, asset: str) -> pd.Series:
 
 
 def _simulate_group(scores_df: pd.DataFrame, close: pd.Series, group: str, clear_line: float, fee_rate: float) -> dict:
+    """scores_df 如果带 threshold_70/threshold_90 列（动态分档，见
+    backtest/dynamic_bands.py），每天用当天算好的阈值；没有就用固定的
+    0.4/1.0（规格3第一版那套）。历史不足还没有有效动态阈值的天，阈值设成
+    +inf——等同"这天判不了强/弱看多"，不下场，而不是拿一个不可靠的阈值
+    硬凑一个仓位出来。"""
     dates = scores_df.index.intersection(close.index)
     dates = sorted(dates)
 
     daily_ret = close.reindex(dates).pct_change().fillna(0)
+    has_dynamic = "threshold_70" in scores_df.columns and "threshold_90" in scores_df.columns
 
     positions = []
     flip_state = strategy.FlipState()
-    prev_position = 0.0
     for d in dates:
         s = scores_df.loc[d, "composite_score"]
+        if has_dynamic:
+            entry_th = scores_df.loc[d, "threshold_70"]
+            full_th = scores_df.loc[d, "threshold_90"]
+            if pd.isna(entry_th) or pd.isna(full_th):
+                entry_th, full_th = float("inf"), float("inf")
+        else:
+            entry_th, full_th = strategy.ENTRY_THRESHOLD, 1.0
+
         if group == "A":
-            pos = strategy.flip_target_position(s, flip_state, clear_line)
+            pos = strategy.flip_target_position(s, flip_state, clear_line, entry_threshold=entry_th)
         elif group == "B":
-            pos = strategy.tiered_target_position(s)
+            pos = strategy.tiered_target_position(s, entry_threshold=entry_th, full_threshold=full_th)
         elif group == "C":
-            pos = strategy.merged_target_position(s, clear_line)
+            pos = strategy.merged_target_position(s, clear_line, entry_threshold=entry_th, full_threshold=full_th)
         else:
             raise ValueError(f"unknown group {group}")
         positions.append(pos)
@@ -90,10 +106,27 @@ def _simulate_group(scores_df: pd.DataFrame, close: pd.Series, group: str, clear
     return perf
 
 
-def main(start_date: str | None = None, end_date: str | None = None, clear_line: float = strategy.DEFAULT_CLEAR_LINE, fee_rate: float = DEFAULT_FEE_RATE):
+def main(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    clear_line: float = strategy.DEFAULT_CLEAR_LINE,
+    fee_rate: float = DEFAULT_FEE_RATE,
+    assets: list | None = None,
+    use_dynamic_bands: bool = False,
+    dynamic_band_min_history: int = 90,
+):
+    """assets=None 跑全部6币（规格3第一版的行为）；传 ["BTC","ETH","SOL"] 之类
+    的子集只跑这几个币，用于校准阶段的对比重测，不用每次都跑全量6币。
+
+    use_dynamic_bands=True 时，分档边界改成 BTC/ETH/SOL 合成分的滚动历史
+    分位（见 backtest/dynamic_bands.py），只用严格早于当天的历史算——这套
+    只影响这次回测的 action/策略仓位，不改 core/score.py 里线上用的固定表。
+    """
     system_config, factor_rules = rules.load_rule_table()
     full_history = store.load(FACTOR_TIMESERIES_PATH)
     vintage_cache = point_in_time.load_vintage_cache()
+
+    target_assets = assets or rules.ALL_ASSETS
 
     btc_close = _close_price_series(full_history, "BTC")
     if start_date is None:
@@ -103,12 +136,23 @@ def main(start_date: str | None = None, end_date: str | None = None, clear_line:
         end_date = (pd.Timestamp(full_history["date"].max()) - pd.Timedelta(days=max_horizon)).strftime("%Y-%m-%d")
 
     dates = pd.date_range(start_date, end_date, freq="D").strftime("%Y-%m-%d").tolist()
-    print(f"[backtest] 回测区间 {start_date} ~ {end_date}，共 {len(dates)} 天")
+    print(f"[backtest] 回测区间 {start_date} ~ {end_date}，共 {len(dates)} 天，币种 {target_assets}")
 
-    per_asset_scores = _daily_score_series(full_history, vintage_cache, system_config, factor_rules, dates)
+    per_asset_scores = _daily_score_series(full_history, vintage_cache, system_config, factor_rules, dates, target_assets)
+
+    if use_dynamic_bands:
+        thresholds = dynamic_bands.compute_expanding_thresholds(
+            {a: per_asset_scores[a]["composite_score"] for a in target_assets},
+            min_history=dynamic_band_min_history,
+        )
+        for a in target_assets:
+            per_asset_scores[a] = dynamic_bands.apply_dynamic_bands(per_asset_scores[a], thresholds)
+        action_order = ["强烈看多 / 加仓", "看多 / 建仓", "中性 / 观望", "看空 / 减仓", "强烈看空 / 清仓"]
+    else:
+        action_order = [b.action for b in system_config.action_bands]
 
     results = {}
-    for asset in rules.ALL_ASSETS:
+    for asset in target_assets:
         scores_df = per_asset_scores[asset]
         close = _close_price_series(full_history, asset)
         if close.empty:
@@ -120,7 +164,6 @@ def main(start_date: str | None = None, end_date: str | None = None, clear_line:
             fwd_ret = metrics.forward_return(close, horizon).reindex(scores_df.index)
             ic_results[horizon] = metrics.rank_ic(scores_df["composite_score"], fwd_ret)
 
-        action_order = [b.action for b in system_config.action_bands]
         mono_tables = {}
         for horizon in FORWARD_HORIZONS:
             fwd_ret = metrics.forward_return(close, horizon).reindex(scores_df.index)
@@ -141,7 +184,7 @@ def main(start_date: str | None = None, end_date: str | None = None, clear_line:
         }
         print(f"[backtest] {asset} 完成：avg_coverage={results[asset]['avg_coverage']}")
 
-    return results, {"start_date": start_date, "end_date": end_date, "clear_line": clear_line, "fee_rate": fee_rate}
+    return results, {"start_date": start_date, "end_date": end_date, "clear_line": clear_line, "fee_rate": fee_rate, "assets": target_assets, "use_dynamic_bands": use_dynamic_bands}
 
 
 if __name__ == "__main__":

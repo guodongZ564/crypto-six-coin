@@ -20,7 +20,7 @@ def _serialize_perf(perf: dict) -> dict:
     return {k: v for k, v in perf.items() if k not in ("positions", "daily_return", "equity_curve")}
 
 
-def main(start_date=None, end_date=None, clear_line=None, fee_rate=None):
+def main(start_date=None, end_date=None, clear_line=None, fee_rate=None, assets=None, use_dynamic_bands=False, output_dir=None):
     kwargs = {}
     if start_date:
         kwargs["start_date"] = start_date
@@ -30,18 +30,22 @@ def main(start_date=None, end_date=None, clear_line=None, fee_rate=None):
         kwargs["clear_line"] = clear_line
     if fee_rate is not None:
         kwargs["fee_rate"] = fee_rate
+    if assets is not None:
+        kwargs["assets"] = assets
+    kwargs["use_dynamic_bands"] = use_dynamic_bands
 
     results, meta = run_backtest.main(**kwargs)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(output_dir) if output_dir else OUTPUT_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     summary = {"meta": meta, "assets": {}}
     for asset, r in results.items():
-        r["scores_df"].to_parquet(OUTPUT_DIR / f"scores_{asset}.parquet")
+        r["scores_df"].to_parquet(output_dir / f"scores_{asset}.parquet")
 
         for group, perf in r["group_performance"].items():
-            perf["equity_curve"].rename("equity").to_frame().to_parquet(OUTPUT_DIR / f"equity_{asset}_{group}.parquet")
-            perf["positions"].rename("position").to_frame().to_parquet(OUTPUT_DIR / f"positions_{asset}_{group}.parquet")
+            perf["equity_curve"].rename("equity").to_frame().to_parquet(output_dir / f"equity_{asset}_{group}.parquet")
+            perf["positions"].rename("position").to_frame().to_parquet(output_dir / f"positions_{asset}_{group}.parquet")
 
         mono_serialized = {}
         for h, table in r["monotonicity"].items():
@@ -54,10 +58,10 @@ def main(start_date=None, end_date=None, clear_line=None, fee_rate=None):
             "group_performance": {g: _serialize_perf(p) for g, p in r["group_performance"].items()},
         }
 
-    with open(OUTPUT_DIR / "summary.json", "w", encoding="utf-8") as f:
+    with open(output_dir / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
 
-    print(f"[run_and_save] 结果已写入 {OUTPUT_DIR}/")
+    print(f"[run_and_save] 结果已写入 {output_dir}/")
     return summary
 
 

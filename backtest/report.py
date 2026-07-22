@@ -54,10 +54,10 @@ def _style_axes(ax):
     ax.set_axisbelow(True)
 
 
-def _equity_chart(asset: str) -> str:
+def _equity_chart(asset: str, output_dir: Path = OUTPUT_DIR) -> str:
     fig, ax = plt.subplots(figsize=(7, 3.2))
     for group in ["A", "B", "C"]:
-        path = OUTPUT_DIR / f"equity_{asset}_{group}.parquet"
+        path = output_dir / f"equity_{asset}_{group}.parquet"
         if not path.exists():
             continue
         df = pd.read_parquet(path)
@@ -140,10 +140,10 @@ def _perf_table_html(group_performance: dict) -> str:
     )
 
 
-def _asset_section(asset: str, data: dict) -> str:
+def _asset_section(asset: str, data: dict, output_dir: Path = OUTPUT_DIR) -> str:
     coverage = data.get("avg_coverage")
     coverage_str = f"{coverage*100:.0f}%" if coverage is not None else "N/A"
-    equity_img = _equity_chart(asset)
+    equity_img = _equity_chart(asset, output_dir)
     mono_img = _monotonicity_chart(asset, data.get("monotonicity", {}))
     return f"""
 <section class="asset-section">
@@ -179,8 +179,9 @@ def _overview_row(asset: str, data: dict) -> str:
     )
 
 
-def generate_report(output_path: str = "backtest/output/report.html"):
-    with open(OUTPUT_DIR / "summary.json", encoding="utf-8") as f:
+def generate_report(output_path: str = "backtest/output/report.html", input_dir: str | None = None):
+    input_dir = Path(input_dir) if input_dir else OUTPUT_DIR
+    with open(input_dir / "summary.json", encoding="utf-8") as f:
         summary = json.load(f)
 
     meta = summary["meta"]
@@ -190,8 +191,8 @@ def generate_report(output_path: str = "backtest/output/report.html"):
     negative_assets = {a: d for a, d in assets.items() if (d["ic_results"].get("7", {}).get("ic") or 0) <= 0}
 
     overview_rows = "".join(_overview_row(a, d) for a, d in assets.items())
-    sections_full = "".join(_asset_section(a, d) for a, d in positive_assets.items())
-    sections_low = "".join(_asset_section(a, d) for a, d in negative_assets.items())
+    sections_full = "".join(_asset_section(a, d, input_dir) for a, d in positive_assets.items())
+    sections_low = "".join(_asset_section(a, d, input_dir) for a, d in negative_assets.items())
 
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
@@ -289,8 +290,9 @@ th {{ color: var(--text-muted); font-weight: 600; font-size: 12px; }}
 img {{ max-width: 100%; display: block; }}
 </style>
 </head><body>
-<h1>六币策略回测报告</h1>
-<p class="meta">回测区间 {meta['start_date']} ~ {meta['end_date']} · 清仓线 {_num(meta['clear_line'])} · 单边手续费+滑点 {_num(f"{meta['fee_rate']*100:.2f}%")}</p>
+<h1>{'/'.join(meta.get('assets', []))} 策略回测报告</h1>
+<p class="meta">回测区间 {meta['start_date']} ~ {meta['end_date']} · 清仓线 {_num(meta['clear_line'])} · 单边手续费+滑点 {_num(f"{meta['fee_rate']*100:.2f}%")}
+{' · 动态分档(BTC/ETH/SOL池化滚动70/90分位)' if meta.get('use_dynamic_bands') else ' · 固定分档(±0.4/±1.0)'}</p>
 
 <div class="warning">
 ⚠️ 组B(纯分档)和组C(合并)在当前现货版实现下数学上完全等价：分档表本身在合成分&lt;0.4时就已经把仓位归零，
@@ -313,12 +315,12 @@ img {{ max-width: 100%; display: block; }}
 </table>
 </div>
 
-<h2>预测方向为正的币种（BTC/ETH/SOL）</h2>
+<h2>预测方向为正的币种</h2>
 <p class="meta">分数越高，未来收益统计上确实倾向更高——评分对这些币有实际参考意义，但仍是弱信号（IC普遍&lt;0.1），不是精确预测。</p>
 {sections_full if sections_full else '<p>无</p>'}
 
-<h2>预测方向为负或存疑的币种（UNI/LINK/LTC）</h2>
-<p class="meta">IC为负、分档不单调——分数越高未来反而可能跌得更多。这三个币现在的评分不应该用来指导仓位，需要先查是权重/因子选择的问题还是这些币本身跟当前因子集脱钩。</p>
+<h2>预测方向为负或存疑的币种</h2>
+<p class="meta">IC为负、分档不单调——分数越高未来反而可能跌得更多，这些币现在的评分不应该用来指导仓位。</p>
 {sections_low if sections_low else '<p>无</p>'}
 
 </body></html>

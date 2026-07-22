@@ -21,13 +21,15 @@ ENTRY_THRESHOLD = 0.4  # 分档表 看多/建仓 的下边界，也是组A"进�
 DEFAULT_CLEAR_LINE = 0.0
 
 
-def tiered_target_position(composite_score: float | None) -> float:
-    """现货版分档：≥1.0→100%，0.4~1.0→50%，其余(含None)→0%。"""
+def tiered_target_position(composite_score: float | None, entry_threshold: float = ENTRY_THRESHOLD, full_threshold: float = 1.0) -> float:
+    """现货版分档：≥full_threshold→100%，entry_threshold~full_threshold→50%，
+    其余(含None)→0%。entry_threshold/full_threshold 默认是固定分档表的
+    0.4/1.0，回测校准动态分档时传当天算好的滚动分位阈值进来。"""
     if composite_score is None:
         return 0.0
-    if composite_score >= 1.0:
+    if composite_score >= full_threshold:
         return 1.0
-    if composite_score >= ENTRY_THRESHOLD:
+    if composite_score >= entry_threshold:
         return 0.5
     return 0.0
 
@@ -37,12 +39,12 @@ class FlipState:
     in_position: bool = False
 
 
-def flip_target_position(composite_score: float | None, state: FlipState, clear_line: float = DEFAULT_CLEAR_LINE) -> float:
+def flip_target_position(composite_score: float | None, state: FlipState, clear_line: float = DEFAULT_CLEAR_LINE, entry_threshold: float = ENTRY_THRESHOLD) -> float:
     """组A：双稳态开关，state 由调用方在多天之间持有、传入传出。"""
     if composite_score is None:
         return 1.0 if state.in_position else 0.0
 
-    if not state.in_position and composite_score >= ENTRY_THRESHOLD:
+    if not state.in_position and composite_score >= entry_threshold:
         state.in_position = True
     elif state.in_position and composite_score < clear_line:
         state.in_position = False
@@ -50,9 +52,9 @@ def flip_target_position(composite_score: float | None, state: FlipState, clear_
     return 1.0 if state.in_position else 0.0
 
 
-def merged_target_position(composite_score: float | None, clear_line: float = DEFAULT_CLEAR_LINE) -> float:
+def merged_target_position(composite_score: float | None, clear_line: float = DEFAULT_CLEAR_LINE, entry_threshold: float = ENTRY_THRESHOLD, full_threshold: float = 1.0) -> float:
     """组C：分档目标仓位，但分数跌破清仓线时强制清零，优先级高于分档。"""
-    target = tiered_target_position(composite_score)
+    target = tiered_target_position(composite_score, entry_threshold, full_threshold)
     if composite_score is not None and composite_score < clear_line:
         return 0.0
     return target
