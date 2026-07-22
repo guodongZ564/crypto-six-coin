@@ -41,6 +41,15 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m narrate.run_narrated_report
 
+      # 事后不可改的实盘留痕：只追加当天的分数、只回填到期的未来收益，
+      # 历史行永远不会被重算。跟评分同一批数据(prepare_report)，所以放在
+      # 叙事之后、仪表盘之前都行，这里选紧跟叙事之后。
+      - name: Record scoring track (BTC/ETH/SOL)
+        run: python -m tracking.record_track
+
+      - name: Generate tracking validation report (docs/tracking.html)
+        run: python -m tracking.report
+
       # 手动触发(workflow_dispatch)走的是同一个 job、同一套 on: 触发器，会
       # 完整跑一遍采集→评分→生成，不是单独刷新页面。
       - name: Build dashboard (docs/index.html)
@@ -50,25 +59,26 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/factor_timeseries.parquet data/composite_score_history.parquet
+          git add data/factor_timeseries.parquet data/composite_score_history.parquet data/scoring_track.parquet
           git diff --cached --quiet || git commit -m "data: daily factor + score update $(date -u +%Y-%m-%d)"
           git pull --rebase origin main
           git push
 
-      # docs/index.html 每天全量重新生成、体积不小，不进 main 的提交历史——
-      # 单独发到一个孤儿分支 gh-pages，每次都是全新的单个commit、force push
-      # 覆盖，不在任何分支上累积历史。仓库 Settings → Pages → Source 需要手动
-      # 选一次 gh-pages 分支，这一步没法用 git 操作代劳。
+      # docs/ 每天全量重新生成、体积不小，不进 main 的提交历史——单独发到
+      # 一个孤儿分支 gh-pages，每次都是全新的单个commit、force push覆盖，
+      # 不在任何分支上累积历史。整个 docs/ 目录都拷过去(index.html +
+      # tracking.html)，不是只拷一个文件。
       - name: Deploy dashboard to gh-pages
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          cp docs/index.html /tmp/dashboard.html
+          rm -rf /tmp/pages-deploy
+          cp -r docs /tmp/pages-deploy
           git checkout --orphan gh-pages-deploy
           git rm -rf . > /dev/null 2>&1 || true
           git clean -fdx -q
-          cp /tmp/dashboard.html ./index.html
-          git add index.html
+          cp -r /tmp/pages-deploy/. .
+          git add .
           git commit -m "dashboard: update $(date -u +%Y-%m-%d)"
           git push origin gh-pages-deploy:gh-pages --force
           git checkout main
