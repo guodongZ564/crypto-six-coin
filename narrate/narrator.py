@@ -12,6 +12,12 @@ import anthropic
 
 MODEL = "claude-sonnet-5"
 
+
+class NarrationUnavailable(Exception):
+    """Anthropic API 调用失败（额度超限/网络抖动/服务故障等）时抛出，
+    跟"叙事层写错了什么"是两回事——调用方应该降级成不叙事的原始数据播报，
+    而不是让整个流程崩溃，白丢一天已经采集好的数据。"""
+
 SYSTEM_PROMPT = """你是"即时策略站"的中文交易逻辑撰写助手，服务对象是自己看盘的个人交易者。
 
 硬性规则（不能违反）：
@@ -59,12 +65,16 @@ def generate_narrative(payload: dict, api_key: str | None = None) -> str:
         raise RuntimeError("ANTHROPIC_API_KEY 未配置")
 
     client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model=MODEL,
-        max_tokens=3000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": _build_user_message(payload)}],
-    )
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=3000,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": _build_user_message(payload)}],
+        )
+    except anthropic.APIError as e:
+        raise NarrationUnavailable(str(e)) from e
+
     if message.stop_reason == "max_tokens":
         print("[narrator][WARN] 输出撞到 max_tokens 被截断了，考虑再调大或者精简 system prompt 的要求")
     return "".join(block.text for block in message.content if block.type == "text")

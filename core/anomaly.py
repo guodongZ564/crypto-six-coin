@@ -39,7 +39,27 @@ def compute_z_scores(history: pd.DataFrame, target_date: str, config: dict) -> l
 
         mu = float(window["value"].mean())
         sigma = float(window["value"].std(ddof=0))
-        z = 0.0 if sigma == 0 or np.isnan(sigma) else (today_value - mu) / sigma
+
+        # 月度/低频宏观因子按日forward-fill后，窗口内经常连续几十天数值完全
+        # 不变，std 算出来不是精确的0而是浮点噪声(~1e-16)。除以这种"约等于0"
+        # 的std会把一次正常的小幅变化放大成几十万亿倍标准差的假异动
+        # (实测 core_pce: mean=3.412, std=4.47e-16 → z=-2.8e14)。用相对于
+        # 数值量级的下限判断"这个窗口其实没有真实波动"，跳过z值计算，而不是
+        # 硬算出一个没有统计意义的数字。
+        min_meaningful_sigma = max(abs(mu), 1.0) * 1e-9
+        if sigma < min_meaningful_sigma:
+            results.append({
+                "asset": asset,
+                "factor": factor,
+                "value": today_value,
+                "mean": mu,
+                "std": sigma,
+                "z": None,
+                "status": "insufficient_variance",
+            })
+            continue
+
+        z = (today_value - mu) / sigma
 
         results.append({
             "asset": asset,

@@ -8,6 +8,7 @@ from datetime import date
 
 from core import alert, store
 from narrate import narrator, prepare_report
+from narrate.narrator import NarrationUnavailable
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -42,10 +43,49 @@ def _format_anomalies(anomalies: list) -> str:
     return "\n".join(lines)
 
 
+def _fallback_data_summary(payload: dict) -> str:
+    """Anthropic API 调用失败时的降级播报：不叙事、不润色，直接把
+    prepare_report 算好的确定性数字排版成中文——比崩溃丢掉整条流水线的价值
+    高得多，也比硬凑一段假叙事诚实。"""
+    regime = payload["regime"]
+    lines = [
+        "⚠️ 叙事生成暂时不可用（Anthropic API 异常），以下为原始数据播报，数字均为确定性代码算出，未经AI转译",
+        "",
+        f"大环境：regime_score={regime['regime_score']:+.2f}（{regime['band_label']}）"
+        f"宏观{regime['macro_valid']}/{regime['macro_total']} 周期{regime['cycle_valid']}/{regime['cycle_total']}",
+        "",
+    ]
+    for c in payload["coins"]:
+        score_text = f"{c['composite_score']:+.2f}" if c["composite_score"] is not None else "N/A"
+        conf_text = f"{c['confidence_pct']:.0f}%" if c["confidence_pct"] is not None else "N/A"
+        lines.append(
+            f"{c['asset']}：综合分{score_text} / {c['action']} / "
+            f"目标仓位{c['target_position_pct']:.0f}% / 置信度{conf_text}"
+        )
+        dim_text = "，".join(
+            f"{name}{d['score']:+.2f}({d['valid']}/{d['total']})" if d["score"] is not None
+            else f"{name}N/A({d['valid']}/{d['total']})"
+            for name, d in c["dimensions"].items()
+        )
+        lines.append(f"  维度：{dim_text}")
+        cred = c["backtest_credibility"]
+        lines.append(f"  回测可信度：{cred['tier']} —— {cred['note']}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def build_report(target_date: str) -> tuple:
-    """返回 (报告文本, payload)，payload 留给调用方存档/调试用。"""
+    """返回 (报告文本, payload)，payload 留给调用方存档/调试用。
+
+    Anthropic API 失败（额度超限/网络抖动/服务故障）不能让这里抛出去——
+    那样 GitHub Actions 会在这一步停住，后面留痕/仪表盘/数据提交全部被跳过，
+    白丢一整天已经采集好的数据。叙事失败就降级成原始数据播报，报告照发。"""
     payload = prepare_report.prepare(target_date)
-    narrative = narrator.generate_narrative(payload)
+    try:
+        narrative = narrator.generate_narrative(payload)
+    except NarrationUnavailable as e:
+        print(f"[run_narrated_report][WARN] 叙事生成失败，降级为原始数据播报：{e}")
+        narrative = _fallback_data_summary(payload)
 
     lines = [f"📊 三币策略日报 · {target_date}", WARNING_BANNER, "", narrative]
     anomaly_section = _format_anomalies(payload["anomalies"])
