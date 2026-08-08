@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>评分实盘验证 · 2026-08-08</title>
+<style>
+:root {
+  --bg: #f4f5f7; --surface: #ffffff; --border: #dde1e7;
+  --text: #161922; --text-muted: #626a78;
+  --accent: #34507e; --accent-soft: #e8edf5;
+  --good: #1e8a72; --good-soft: #e3f3ef;
+  --bad: #c1502e; --bad-soft: #fbe9e3;
+  --warn-bg: #fdf3df; --warn-border: #e8c477;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10131a; --surface: #1a1e27; --border: #2b303c;
+    --text: #e8eaf0; --text-muted: #97a0b3;
+    --accent: #8fa8d6; --accent-soft: #202a3d;
+    --good: #4fbfa0; --good-soft: #163330;
+    --bad: #e2825f; --bad-soft: #3a2320;
+    --warn-bg: #33291a; --warn-border: #6b5326;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10131a; --surface: #1a1e27; --border: #2b303c;
+  --text: #e8eaf0; --text-muted: #97a0b3;
+  --accent: #8fa8d6; --accent-soft: #202a3d;
+  --good: #4fbfa0; --good-soft: #163330;
+  --bad: #e2825f; --bad-soft: #3a2320;
+  --warn-bg: #33291a; --warn-border: #6b5326;
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f7; --surface: #ffffff; --border: #dde1e7;
+  --text: #161922; --text-muted: #626a78;
+  --accent: #34507e; --accent-soft: #e8edf5;
+  --good: #1e8a72; --good-soft: #e3f3ef;
+  --bad: #c1502e; --bad-soft: #fbe9e3;
+  --warn-bg: #fdf3df; --warn-border: #e8c477;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: "Microsoft YaHei", -apple-system, "Segoe UI", "PingFang SC", sans-serif;
+  background: var(--bg); color: var(--text);
+  max-width: 900px; margin: 0 auto; padding: 32px 20px 80px; line-height: 1.55;
+}
+.num, .num * { font-family: "Cascadia Code", "SF Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+h2 { font-size: 18px; font-weight: 700; margin: 0 0 12px; }
+h4 { font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 8px; }
+.meta { color: var(--text-muted); font-size: 13px; }
+.warning {
+  background: var(--warn-bg); border: 1px solid var(--warn-border);
+  padding: 14px 18px; border-radius: 8px; margin: 16px 0 24px; font-size: 13.5px; font-weight: 600;
+}
+.coin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; margin: 18px 0; }
+.horizon-block { margin-bottom: 14px; }
+.table-wrap { overflow-x: auto; margin: 8px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { border-bottom: 1px solid var(--border); padding: 6px 10px; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-muted); font-weight: 600; font-size: 12px; }
+.pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.pill-good { background: var(--good-soft); color: var(--good); }
+.pill-bad { background: var(--bad-soft); color: var(--bad); }
+.badge { font-size: 11px; color: var(--text-muted); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+.badge-warn { background: var(--warn-bg); color: #8a6d1f; }
+.ic-line { font-size: 13px; margin: 6px 0 0; }
+.no-data { color: var(--text-muted); font-size: 12px; font-style: italic; }
+</style>
+</head><body>
+<h1>评分实盘验证</h1>
+<p class="meta">数据日期 2026-08-08 · 累计记录 51 条（BTC/ETH/SOL，UNI/LINK/LTC评分已冻结不记录）</p>
+
+<div class="warning">
+⚠️ 样本量不足时结论不可信，建议满 60 条以上再看。当前7日窗口已满期样本共 30 条。
+本页是"事后不可改"的真实记录——每天只追加当天的分数、只回填到期的未来收益，历史行的分数和动作永远不会被重算或修改。
+</div>
+
+
+<section class="coin-card">
+  <h2>BTC</h2>
+  
+<div class="horizon-block">
+  <h4>3日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-0.86%</td><td class='num'>5</td></tr><tr><td>中分组</td><td class='num'>-0.46%</td><td class='num'>4</td></tr><tr><td>低分组</td><td class='num'>+0.70%</td><td class='num'>5</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">-0.499</strong>  <span class='badge badge-warn'>样本仅14条，未达60条参考线</span></p>
+</div>
+
+<div class="horizon-block">
+  <h4>7日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-0.79%</td><td class='num'>3</td></tr><tr><td>中分组</td><td class='num'>-2.22%</td><td class='num'>3</td></tr><tr><td>低分组</td><td class='num'>-0.03%</td><td class='num'>4</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">-0.285</strong> （回测同期IC: +0.038） <span class='badge badge-warn'>样本仅10条，未达60条参考线</span></p>
+</div>
+
+<div class="horizon-block">
+  <h4>14日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-2.73%</td><td class='num'>1</td></tr><tr><td>中分组</td><td class='num'>+1.30%</td><td class='num'>1</td></tr><tr><td>低分组</td><td class='num'>-1.71%</td><td class='num'>2</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">N/A（样本不足）</strong>  <span class='badge badge-warn'>样本仅4条，未达60条参考线</span></p>
+</div>
+
+</section>
+
+<section class="coin-card">
+  <h2>ETH</h2>
+  
+<div class="horizon-block">
+  <h4>3日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>+0.09%</td><td class='num'>5</td></tr><tr><td>中分组</td><td class='num'>-1.53%</td><td class='num'>4</td></tr><tr><td>低分组</td><td class='num'>+1.63%</td><td class='num'>5</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">-0.354</strong>  <span class='badge badge-warn'>样本仅14条，未达60条参考线</span></p>
+</div>
+
+<div class="horizon-block">
+  <h4>7日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-2.21%</td><td class='num'>3</td></tr><tr><td>中分组</td><td class='num'>-0.69%</td><td class='num'>3</td></tr><tr><td>低分组</td><td class='num'>+0.86%</td><td class='num'>4</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">-0.733</strong> （回测同期IC: +0.041） <span class='badge badge-warn'>样本仅10条，未达60条参考线</span></p>
+</div>
+
+<div class="horizon-block">
+  <h4>14日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-1.13%</td><td class='num'>1</td></tr><tr><td>中分组</td><td class='num'>-2.71%</td><td class='num'>1</td></tr><tr><td>低分组</td><td class='num'>+2.03%</td><td class='num'>2</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">N/A（样本不足）</strong>  <span class='badge badge-warn'>样本仅4条，未达60条参考线</span></p>
+</div>
+
+</section>
+
+<section class="coin-card">
+  <h2>SOL</h2>
+  
+<div class="horizon-block">
+  <h4>3日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-1.98%</td><td class='num'>5</td></tr><tr><td>中分组</td><td class='num'>-0.93%</td><td class='num'>4</td></tr><tr><td>低分组</td><td class='num'>+0.36%</td><td class='num'>5</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">-0.499</strong>  <span class='badge badge-warn'>样本仅14条，未达60条参考线</span></p>
+</div>
+
+<div class="horizon-block">
+  <h4>7日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-3.98%</td><td class='num'>3</td></tr><tr><td>中分组</td><td class='num'>-2.52%</td><td class='num'>3</td></tr><tr><td>低分组</td><td class='num'>+0.29%</td><td class='num'>4</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">-0.685</strong> （回测同期IC: +0.091） <span class='badge badge-warn'>样本仅10条，未达60条参考线</span></p>
+</div>
+
+<div class="horizon-block">
+  <h4>14日窗口</h4>
+  
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>分组</th><th>平均收益</th><th>样本数</th></tr></thead>
+<tbody><tr><td>高分组</td><td class='num'>-5.27%</td><td class='num'>1</td></tr><tr><td>中分组</td><td class='num'>-4.10%</td><td class='num'>1</td></tr><tr><td>低分组</td><td class='num'>-2.37%</td><td class='num'>2</td></tr></tbody>
+</table>
+</div>
+<p><span class='pill pill-bad'>高分组收益 ≤ 低分组，不符合预期</span></p>
+
+  <p class="ic-line">实盘 Rank IC：<strong class="num">N/A（样本不足）</strong>  <span class='badge badge-warn'>样本仅4条，未达60条参考线</span></p>
+</div>
+
+</section>
+
+
+</body></html>
